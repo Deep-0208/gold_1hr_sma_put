@@ -10,8 +10,8 @@ On each **completed H1 candle** (forming bar always dropped), SMA 20 / SMA 50 on
 | # | Condition |
 |---|-----------|
 | 1 | Candle is **red** — `close < open` |
-| 2 | **Open above SMA 50** — `open > SMA50` (between the SMAs or above both; below SMA 50 = skip) |
-| 3 | **SMA 20 above SMA 50** |
+| 2 | **Open above SMA 20** — `open > SMA20` (between the SMAs or above both; below SMA 20 = skip) |
+| 3 | **SMA 20 below SMA 50** — `SMA(20) < SMA(50)` (bearish moving average alignment) |
 | 4 | **Close below SMA 20** |
 | 5 | **Close below SMA 50** |
 

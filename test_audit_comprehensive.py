@@ -56,11 +56,11 @@ def _tick(bid=4149.90, ask=4150.10, ltp=None):
 
 
 def _signal_candles(close_dt_utc: datetime):
-    """59 rising bars (SMA20 > SMA50) + one bearish breakdown bar whose bar-open is close_dt_utc - 1h."""
+    """59 falling bars (SMA20 < SMA50) + one bearish breakdown bar whose bar-open is close_dt_utc - 1h."""
     base = close_dt_utc - timedelta(hours=60)
     candles = []
     for i in range(59):
-        c = 4100 + i * 2
+        c = 4300 - i * 2
         dt = base + timedelta(hours=i)
         candles.append({"open": c + 1, "high": c + 3, "low": c - 3, "close": c,
                         "date": dt.astimezone(IST), "date_utc": dt, "volume": 1})
@@ -146,28 +146,28 @@ class _ModeMixin:
 class TestSignal(unittest.TestCase):
 
     def test_valid_signal_open_between_smas(self):
-        sig = detect_signal([_candle(4165, 4175, 4080, 4100, sma_20=4180, sma_50=4150)])
+        sig = detect_signal([_candle(4165, 4175, 4080, 4100, sma_20=4150, sma_50=4180)])
         self.assertIsNotNone(sig)
         self.assertEqual(sig.signal_type, "BEARISH_SMA_BREAKDOWN")
         self.assertEqual(sig.sl_price, 4175)
 
     def test_valid_signal_open_above_both(self):
-        self.assertIsNotNone(detect_signal([_candle(4200, 4220, 4080, 4100, sma_20=4180, sma_50=4150)]))
+        self.assertIsNotNone(detect_signal([_candle(4200, 4220, 4080, 4100, sma_20=4150, sma_50=4180)]))
 
     def test_green_candle_rejected(self):
-        self.assertIsNone(detect_signal([_candle(4165, 4220, 4080, 4170, sma_20=4180, sma_50=4150)]))
+        self.assertIsNone(detect_signal([_candle(4165, 4220, 4080, 4170, sma_20=4150, sma_50=4180)]))
 
     def test_close_above_sma20_rejected(self):
-        self.assertIsNone(detect_signal([_candle(4200, 4220, 4080, 4190, sma_20=4180, sma_50=4150)]))
+        self.assertIsNone(detect_signal([_candle(4200, 4220, 4080, 4160, sma_20=4150, sma_50=4180)]))
 
     def test_close_above_sma50_rejected(self):
-        self.assertIsNone(detect_signal([_candle(4200, 4220, 4080, 4160, sma_20=4180, sma_50=4150)]))
+        self.assertIsNone(detect_signal([_candle(4200, 4220, 4080, 4160, sma_20=4150, sma_50=4180)]))
 
-    def test_open_below_sma50_rejected(self):
-        self.assertIsNone(detect_signal([_candle(4140, 4145, 4080, 4100, sma_20=4180, sma_50=4150)]))
+    def test_open_below_sma20_rejected(self):
+        self.assertIsNone(detect_signal([_candle(4140, 4145, 4080, 4100, sma_20=4150, sma_50=4180)]))
 
-    def test_sma20_below_sma50_rejected(self):
-        self.assertIsNone(detect_signal([_candle(4200, 4220, 4080, 4100, sma_20=4150, sma_50=4180)]))
+    def test_sma20_above_sma50_rejected(self):
+        self.assertIsNone(detect_signal([_candle(4200, 4220, 4080, 4100, sma_20=4180, sma_50=4150)]))
 
     def test_missing_and_nan_sma_rejected(self):
         self.assertIsNone(detect_signal([_candle(4200, 4220, 4080, 4100, sma_20=None, sma_50=4180)]))
@@ -178,12 +178,12 @@ class TestSignal(unittest.TestCase):
         self.assertIsNone(detect_signal([]))
 
     def test_only_latest_candle_evaluated(self):
-        good = _candle(4200, 4220, 4080, 4100, sma_20=4180, sma_50=4150)
-        bad = _candle(4140, 4145, 4080, 4100, sma_20=4180, sma_50=4150)
+        good = _candle(4200, 4220, 4080, 4100, sma_20=4150, sma_50=4180)
+        bad = _candle(4140, 4145, 4080, 4100, sma_20=4150, sma_50=4180)
         self.assertIsNone(detect_signal([good, bad]))
 
     def test_checklist_text(self):
-        line = format_signal_checklist(_candle(4200, 4220, 4080, 4100, sma_20=4180, sma_50=4150))
+        line = format_signal_checklist(_candle(4200, 4220, 4080, 4100, sma_20=4150, sma_50=4180))
         self.assertEqual(line.count("✅"), 5)
 
 
@@ -262,7 +262,7 @@ class TestRisk(_ModeMixin, unittest.TestCase):
 # ═══════════════════════════════════════════════
 
 def _sig(high=4215.0):
-    return detect_signal([_candle(4210, high, 4145, 4150, sma_20=4200, sma_50=4180)])
+    return detect_signal([_candle(4210, high, 4145, 4150, sma_20=4180, sma_50=4200)])
 
 
 class TestOrdersPaper(_ModeMixin, unittest.TestCase):
