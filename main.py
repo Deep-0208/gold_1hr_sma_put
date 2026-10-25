@@ -67,8 +67,8 @@ def _banner(broker: DeltaBroker) -> None:
     log.info("  GOLD (PAXGUSD) 1-HOUR SMA BREAKDOWN — SHORT ONLY")
     log.info("  Mode: %s | Delta Exchange perpetual | 24/7 positional", CONFIG["trading_mode"])
     log.info("  Size: %d contracts = %g oz | R:R 1:%.1f | SL = signal candle high", CONFIG["contract_qty"], oz, CONFIG["rr_ratio"])
-    log.info("  Signal: red | open > SMA%d | SMA%d < SMA%d | close below both SMAs",
-             CONFIG["sma_short"], CONFIG["sma_short"], CONFIG["sma_long"])
+    log.info("  Signal: red | open > SMA%d | SMA%d > SMA%d | close below both SMAs",
+             CONFIG["sma_long"], CONFIG["sma_short"], CONFIG["sma_long"])
     log.info("  Max trades/day: %d | Max daily loss: %s | Max risk: %s",
              CONFIG["max_trades_per_day"],
              f"${CONFIG['max_daily_loss']}" if CONFIG["max_daily_loss"] else "OFF",

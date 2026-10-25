@@ -420,12 +420,15 @@ class DeltaBroker:
           (True, None)         — broker confirms FLAT
           (False, None)        — lookup failed, state UNKNOWN (never treat as flat)
         """
-        data, _ = self._request("GET", "/v2/positions/margined", auth=True)
+        # GET /v2/positions is the real-time endpoint; /v2/positions/margined can lag
+        # up to 10 s (Delta docs), which would read a just-filled entry as FLAT.
+        data, _ = self._request("GET", "/v2/positions", params={"product_id": self.product_id}, auth=True)
         if data is None:
             return False, None
 
-        for pos in data.get("result", []) or []:
-            if pos.get("product_id") != self.product_id:
+        result = data.get("result") or {}
+        for pos in (result if isinstance(result, list) else [result]):
+            if pos.get("product_id", self.product_id) != self.product_id:
                 continue
             size = int(_to_float(pos.get("size"), 0) or 0)
             if size == 0:

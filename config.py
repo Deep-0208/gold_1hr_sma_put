@@ -8,7 +8,7 @@ Single source of truth for ALL strategy parameters.
 Nothing strategy-specific is hardcoded outside this module.
 
 Port of the NIFTY 1-Hour SMA PUT v2 strategy to Gold:
-  - Same signal rules (red candle, open > SMA20, SMA20 < SMA50,
+  - Same signal rules (red candle, open > SMA50, SMA20 > SMA50,
     close below both SMAs) on completed H1 candles.
   - Same risk rules (SL = signal candle high, 1:1 R:R).
   - Bearish exposure is taken by SHORTING the PAXGUSD perpetual

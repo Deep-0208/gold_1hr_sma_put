@@ -47,9 +47,9 @@ def detect_signal(completed_candles: List[Dict]) -> Optional[SetupSignal]:
 
     Signal rules (v2 specification):
         1. Candle is RED: close < open
-        2. Candle OPEN is above SMA 20: open > sma_20
-           (open may sit between the SMAs OR above both SMAs)
-        3. SMA 20 is below SMA 50: sma_20 < sma_50 (bearish alignment)
+        2. Candle OPEN is above SMA 50: open > sma_50
+           (open may sit between the SMAs OR above both; open below SMA 50 = skip)
+        3. SMA 20 is above SMA 50: sma_20 > sma_50
         4. Candle CLOSE is below SMA 20: close < sma_20
         5. Candle CLOSE is below SMA 50: close < sma_50
 
@@ -92,13 +92,13 @@ def detect_signal(completed_candles: List[Dict]) -> Optional[SetupSignal]:
     is_red = c < o
     log_pattern.debug("  [1/5] Red candle check: close=%.2f < open=%.2f -> %s", c, o, is_red)
 
-    # Condition 2: Open above SMA 20 (open may be between the SMAs OR above both)
-    open_above_sma20 = o > sma_20
-    log_pattern.debug("  [2/5] Open above SMA20 check: open=%.2f > sma_20=%.2f -> %s", o, sma_20, open_above_sma20)
+    # Condition 2: Open above SMA 50 (between the SMAs OR above both)
+    open_above_sma50 = o > sma_50
+    log_pattern.debug("  [2/5] Open above SMA50 check: open=%.2f > sma_50=%.2f -> %s", o, sma_50, open_above_sma50)
 
-    # Condition 3: SMA 20 below SMA 50 (bearish alignment)
-    sma20_below_sma50 = sma_20 < sma_50
-    log_pattern.debug("  [3/5] SMA20 below SMA50 check: sma_20=%.2f < sma_50=%.2f -> %s", sma_20, sma_50, sma20_below_sma50)
+    # Condition 3: SMA 20 above SMA 50
+    sma20_above_sma50 = sma_20 > sma_50
+    log_pattern.debug("  [3/5] SMA20 above SMA50 check: sma_20=%.2f > sma_50=%.2f -> %s", sma_20, sma_50, sma20_above_sma50)
 
     # Condition 4: Close below SMA 20
     below_sma20 = c < sma_20
@@ -108,7 +108,7 @@ def detect_signal(completed_candles: List[Dict]) -> Optional[SetupSignal]:
     below_sma50 = c < sma_50
     log_pattern.debug("  [5/5] Below SMA50 check: close=%.2f < sma_50=%.2f -> %s", c, sma_50, below_sma50)
 
-    if is_red and open_above_sma20 and sma20_below_sma50 and below_sma20 and below_sma50:
+    if is_red and open_above_sma50 and sma20_above_sma50 and below_sma20 and below_sma50:
         signal = SetupSignal(
             signal_type="BEARISH_SMA_BREAKDOWN",
             signal_candle=candle,
@@ -118,15 +118,15 @@ def detect_signal(completed_candles: List[Dict]) -> Optional[SetupSignal]:
         )
         log_pattern.info(
             "🎯 BEARISH BREAKDOWN SIGNAL DETECTED on H1 candle %s: "
-            "Open=%.2f > SMA20=%.2f < SMA50=%.2f | Close=%.2f < both SMAs | SL (High)=%.2f",
-            candle_time, o, sma_20, sma_50, c, h,
+            "Open=%.2f > SMA50=%.2f | SMA20=%.2f > SMA50 | Close=%.2f < both SMAs | SL (High)=%.2f",
+            candle_time, o, sma_50, sma_20, c, h,
         )
         return signal
 
     log_pattern.debug(
-        "No signal on H1 candle %s (red=%s, open_above_sma20=%s, sma20_below_sma50=%s, "
+        "No signal on H1 candle %s (red=%s, open_above_sma50=%s, sma20_above_sma50=%s, "
         "below_sma20=%s, below_sma50=%s)",
-        candle_time, is_red, open_above_sma20, sma20_below_sma50, below_sma20, below_sma50,
+        candle_time, is_red, open_above_sma50, sma20_above_sma50, below_sma20, below_sma50,
     )
     return None
 
@@ -142,7 +142,7 @@ def format_signal_checklist(candle: Dict) -> str:
         return "✅" if ok else "❌"
 
     return (
-        f"[PATTERN] {mark(c < o)} red | {mark(o > s20)} open>SMA20 | {mark(s20 < s50)} SMA20<SMA50 | "
+        f"[PATTERN] {mark(c < o)} red | {mark(o > s50)} open>SMA50 | {mark(s20 > s50)} SMA20>SMA50 | "
         f"{mark(c < s20)} close<SMA20 | {mark(c < s50)} close<SMA50 "
         f"(O=${o:.2f} C=${c:.2f} SMA20=${s20:.2f} SMA50=${s50:.2f})"
     )

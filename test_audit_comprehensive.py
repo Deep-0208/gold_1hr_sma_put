@@ -56,11 +56,11 @@ def _tick(bid=4149.90, ask=4150.10, ltp=None):
 
 
 def _signal_candles(close_dt_utc: datetime):
-    """59 descending bars + one bearish breakdown bar whose bar-open is close_dt_utc - 1h."""
+    """59 rising bars (SMA20 > SMA50) + one bearish breakdown bar whose bar-open is close_dt_utc - 1h."""
     base = close_dt_utc - timedelta(hours=60)
     candles = []
     for i in range(59):
-        c = 4300 - i * 2
+        c = 4100 + i * 2
         dt = base + timedelta(hours=i)
         candles.append({"open": c + 1, "high": c + 3, "low": c - 3, "close": c,
                         "date": dt.astimezone(IST), "date_utc": dt, "volume": 1})
@@ -146,28 +146,28 @@ class _ModeMixin:
 class TestSignal(unittest.TestCase):
 
     def test_valid_signal_open_between_smas(self):
-        sig = detect_signal([_candle(4165, 4175, 4080, 4100, sma_20=4150, sma_50=4180)])
+        sig = detect_signal([_candle(4165, 4175, 4080, 4100, sma_20=4180, sma_50=4150)])
         self.assertIsNotNone(sig)
         self.assertEqual(sig.signal_type, "BEARISH_SMA_BREAKDOWN")
         self.assertEqual(sig.sl_price, 4175)
 
     def test_valid_signal_open_above_both(self):
-        self.assertIsNotNone(detect_signal([_candle(4200, 4220, 4080, 4100, sma_20=4150, sma_50=4180)]))
+        self.assertIsNotNone(detect_signal([_candle(4200, 4220, 4080, 4100, sma_20=4180, sma_50=4150)]))
 
     def test_green_candle_rejected(self):
-        self.assertIsNone(detect_signal([_candle(4165, 4220, 4080, 4170, sma_20=4150, sma_50=4180)]))
+        self.assertIsNone(detect_signal([_candle(4165, 4220, 4080, 4170, sma_20=4180, sma_50=4150)]))
 
     def test_close_above_sma20_rejected(self):
-        self.assertIsNone(detect_signal([_candle(4165, 4220, 4080, 4160, sma_20=4150, sma_50=4180)]))
+        self.assertIsNone(detect_signal([_candle(4200, 4220, 4080, 4190, sma_20=4180, sma_50=4150)]))
 
     def test_close_above_sma50_rejected(self):
-        self.assertIsNone(detect_signal([_candle(4165, 4220, 4080, 4140, sma_20=4150, sma_50=4130)]))
+        self.assertIsNone(detect_signal([_candle(4200, 4220, 4080, 4160, sma_20=4180, sma_50=4150)]))
 
-    def test_open_below_sma20_rejected(self):
-        self.assertIsNone(detect_signal([_candle(4140, 4145, 4080, 4100, sma_20=4150, sma_50=4180)]))
+    def test_open_below_sma50_rejected(self):
+        self.assertIsNone(detect_signal([_candle(4140, 4145, 4080, 4100, sma_20=4180, sma_50=4150)]))
 
-    def test_inverted_smas_rejected(self):
-        self.assertIsNone(detect_signal([_candle(4200, 4220, 4080, 4100, sma_20=4150, sma_50=4130)]))
+    def test_sma20_below_sma50_rejected(self):
+        self.assertIsNone(detect_signal([_candle(4200, 4220, 4080, 4100, sma_20=4150, sma_50=4180)]))
 
     def test_missing_and_nan_sma_rejected(self):
         self.assertIsNone(detect_signal([_candle(4200, 4220, 4080, 4100, sma_20=None, sma_50=4180)]))
@@ -178,12 +178,12 @@ class TestSignal(unittest.TestCase):
         self.assertIsNone(detect_signal([]))
 
     def test_only_latest_candle_evaluated(self):
-        good = _candle(4200, 4220, 4080, 4100, sma_20=4150, sma_50=4180)
-        bad = _candle(4140, 4145, 4080, 4100, sma_20=4150, sma_50=4180)
+        good = _candle(4200, 4220, 4080, 4100, sma_20=4180, sma_50=4150)
+        bad = _candle(4140, 4145, 4080, 4100, sma_20=4180, sma_50=4150)
         self.assertIsNone(detect_signal([good, bad]))
 
     def test_checklist_text(self):
-        line = format_signal_checklist(_candle(4200, 4220, 4080, 4100, sma_20=4150, sma_50=4180))
+        line = format_signal_checklist(_candle(4200, 4220, 4080, 4100, sma_20=4180, sma_50=4150))
         self.assertEqual(line.count("✅"), 5)
 
 
@@ -262,7 +262,7 @@ class TestRisk(_ModeMixin, unittest.TestCase):
 # ═══════════════════════════════════════════════
 
 def _sig(high=4215.0):
-    return detect_signal([_candle(4210, high, 4145, 4150, sma_20=4180, sma_50=4200)])
+    return detect_signal([_candle(4210, high, 4145, 4150, sma_20=4200, sma_50=4180)])
 
 
 class TestOrdersPaper(_ModeMixin, unittest.TestCase):
@@ -486,19 +486,27 @@ class TestBrokerParsing(_ModeMixin, unittest.TestCase):
         self.assertEqual(out[-1]["date"].tzinfo, IST)
 
     def test_position_flat_vs_unknown(self):
-        self.responses[("GET", "/v2/positions/margined")] = ({"success": True, "result": [
-            {"product_id": 999, "size": -5, "entry_price": "1"},
-            {"product_id": 123006, "size": -1000, "entry_price": "4150.5", "unrealized_pnl": "1.2"}]}, 200)
-        with patch.object(self.b, "_request", side_effect=self._fake_request):
+        # GET /v2/positions?product_id= (real-time) returns ONE object; size 0 = flat
+        self.responses[("GET", "/v2/positions")] = ({"success": True, "result": {
+            "size": -1000, "entry_price": "4150.5", "unrealized_pnl": "1.2"}}, 200)
+        with patch.object(self.b, "_request", side_effect=self._fake_request) as req:
             known, pos = self.b.get_position()
         self.assertTrue(known)
         self.assertEqual((pos.direction, pos.size, pos.entry_price), ("SHORT", 1000, 4150.5))
+        self.assertEqual(req.call_args.kwargs.get("params"), {"product_id": 123006})
+        self.assertTrue(req.call_args.kwargs.get("auth"))
 
-        self.responses[("GET", "/v2/positions/margined")] = ({"success": True, "result": []}, 200)
+        self.responses[("GET", "/v2/positions")] = ({"success": True, "result": {"size": 0, "entry_price": None}}, 200)
         with patch.object(self.b, "_request", side_effect=self._fake_request):
             self.assertEqual(self.b.get_position(), (True, None))
 
-        self.responses[("GET", "/v2/positions/margined")] = (None, None)
+        # a list-shaped answer is still filtered to this product
+        self.responses[("GET", "/v2/positions")] = ({"success": True, "result": [
+            {"product_id": 999, "size": -5, "entry_price": "1"}]}, 200)
+        with patch.object(self.b, "_request", side_effect=self._fake_request):
+            self.assertEqual(self.b.get_position(), (True, None))
+
+        self.responses[("GET", "/v2/positions")] = (None, None)
         with patch.object(self.b, "_request", side_effect=self._fake_request):
             self.assertEqual(self.b.get_position(), (False, None))
 
@@ -592,9 +600,9 @@ class TestBrokerParsing(_ModeMixin, unittest.TestCase):
         self.assertIsNone(self.b.account_auto_topup)
 
     def test_position_liquidation_fields(self):
-        self.responses[("GET", "/v2/positions/margined")] = ({"success": True, "result": [
-            {"product_id": 123006, "size": -1000, "entry_price": "4150", "liquidation_price": "4170.75",
-             "margin_mode": "isolated", "auto_topup": False}]}, 200)
+        self.responses[("GET", "/v2/positions")] = ({"success": True, "result": {
+            "product_id": 123006, "size": -1000, "entry_price": "4150", "liquidation_price": "4170.75",
+            "margin_mode": "isolated", "auto_topup": False}}, 200)
         with patch.object(self.b, "_request", side_effect=self._fake_request):
             _, pos = self.b.get_position()
         self.assertEqual((pos.liquidation_price, pos.margin_mode, pos.auto_topup), (4170.75, "isolated", False))
