@@ -10,9 +10,11 @@
 Setup (.env): TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 """
 
+import html
 import logging
 import os
 import queue
+import re
 import threading
 from datetime import datetime, timezone, timedelta
 from typing import Optional
@@ -49,6 +51,31 @@ def _badge() -> str:
     return "📝 PAPER" if _mode() != "LIVE" else "🚀 LIVE"
 
 
+def _md_to_html(text: str) -> str:
+    """Converts markdown / MarkdownV2 text into clean HTML for Telegram."""
+    parts = []
+    tokens = re.split(r"(`[^`]+`)", text)
+    for token in tokens:
+        if token.startswith("`") and token.endswith("`"):
+            inner = token[1:-1]
+            inner = inner.replace(r"\\", "\\").replace(r"\`", "`")
+            parts.append(f"<code>{html.escape(inner)}</code>")
+        else:
+            clean = re.sub(r"\\([_*\\[\]()~`>#+\-=|{}.!])", r"\1", token)
+            chunk = html.escape(clean)
+            chunk = re.sub(r"\*([^*\n]+)\*", r"<b>\1</b>", chunk)
+            chunk = re.sub(r"(?<!\w)_([^_\n]+)_(?!\w)", r"<i>\1</i>", chunk)
+            parts.append(chunk)
+    return "".join(parts)
+
+
+def _strip_markdown(text: str) -> str:
+    """Strips all markdown formatting characters for clean plain-text fallback."""
+    clean = re.sub(r"\\([_*\\[\]()~`>#+\-=|{}.!])", r"\1", text)
+    clean = clean.replace("`", "").replace("*", "")
+    return clean
+
+
 class TelegramAlerter:
     """Fire-and-forget Telegram sender. Silent no-op without token / chat id."""
 
@@ -74,16 +101,19 @@ class TelegramAlerter:
         if not self._enabled:
             return
         url = f"https://api.telegram.org/bot{self._token}/sendMessage"
-        for parse_mode in ("MarkdownV2", None):
+        html_text = _md_to_html(text)
+        plain_text = _strip_markdown(text)
+
+        for parse_mode, body in (("HTML", html_text), ("MarkdownV2", text), (None, plain_text)):
             try:
-                payload = {"chat_id": self._chat_id, "text": text if parse_mode else text.replace("\\", "")}
+                payload = {"chat_id": self._chat_id, "text": body, "disable_web_page_preview": True}
                 if parse_mode:
                     payload["parse_mode"] = parse_mode
                 resp = requests.post(url, json=payload, timeout=10)
                 if resp.status_code == 200:
                     return
                 if resp.status_code == 400 and parse_mode:
-                    continue  # plain-text fallback
+                    continue  # fallback to next mode
                 _log.warning("[TELEGRAM] ⚠️ HTTP %d: %s", resp.status_code, resp.text[:200])
                 return
             except Exception as e:
